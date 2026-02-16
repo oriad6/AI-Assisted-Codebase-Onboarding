@@ -1,6 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 from pathlib import Path
+import requests
 
 # Page configuration
 st.set_page_config(
@@ -30,35 +31,35 @@ st.info("💡 **Get Started:** Upload your code files and let AI analyze the str
 with st.sidebar:
     st.header("⚙️ Settings")
     
-    # API Key input
-    api_key = st.text_input(
-        "Google AI API Key",
-        type="password",
-        help="Enter your API key from Google AI Studio (https://aistudio.google.com/app/apikey)"
-    )
+    # Advanced Configuration Expander
+    with st.expander("⚙️ Advanced Configuration", expanded=True):
+        # API Key input
+        api_key = st.text_input(
+            "Google AI API Key",
+            type="password",
+            help="Enter your API key from Google AI Studio (https://aistudio.google.com/app/apikey)"
+        )
 
-    # API Key status and test
-    if api_key:
-        st.success("🔑 API Key provided")
-        
-        # Test API Connection
-        if st.button("🔍 Test API Connection"):
-            try:
-                genai.configure(api_key=api_key)
-                models = genai.list_models()
-                available_models = [m.name for m in models if 'generateContent' in m.supported_generation_methods]
-                st.session_state['available_models'] = available_models
-                st.session_state['connection_status'] = f"✅ Connected! {len(available_models)} models available"
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ Connection failed: {str(e)}")
-                st.session_state['connection_status'] = None
-        
-        # Display connection status if available
-        if st.session_state.get('connection_status'):
-            st.success(st.session_state['connection_status'])
-    else:
-        st.warning("⚠️ Please enter API Key")
+        # API Key status and test
+        if api_key:
+            st.success("🔑 API Key provided")
+            
+            # Test API Connection
+            if st.button("🔍 Test API Connection"):
+                try:
+                    genai.configure(api_key=api_key)
+                    models = genai.list_models()
+                    available_models = [m.name for m in models if 'generateContent' in m.supported_generation_methods]
+                    st.session_state['available_models'] = available_models
+                    
+                    if available_models:
+                        st.success(f"✅ Connection Successful! Found {len(available_models)} models.")
+                    else:
+                        st.warning("⚠️ Connected, but no text generation models found.")
+                except Exception as e:
+                    st.error(f"❌ Connection Failed: {str(e)}")
+        else:
+            st.warning("⚠️ Please enter API Key")
     
     # Model selection handled automatically with fallback
     # PRIORITY_MODELS = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.0-pro"]
@@ -108,14 +109,61 @@ with st.sidebar:
         error_details = "\n".join(errors)
         raise Exception(f"All models failed to generate content.\nDetails:\n{error_details}")
 
-    # How to use section
-    
+    # Helper function for GitHub fetching
+    def fetch_github_repo(repo_url):
+        # Extract owner and repo
+        try:
+            parts = repo_url.rstrip("/").split("/")
+            owner, repo = parts[-2], parts[-1]
+        except:
+            return None, "Invalid GitHub URL format."
+        
+        # Get repository tree
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/main?recursive=1"
+        try:
+            response = requests.get(api_url)
+            if response.status_code == 404:
+                # Try master branch if main fails
+                api_url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/master?recursive=1"
+                response = requests.get(api_url)
+            
+            if response.status_code != 200:
+                return None, f"Failed to fetch repo: {response.json().get('message', 'Unknown error')}"
+            
+            tree = response.json().get('tree', [])
+            files_data = []
+            
+            allowed_extensions = {'.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.rs', '.php', '.rb', '.kt', '.swift', '.dart', '.html', '.css', '.json', '.yaml', '.yml', '.xml', '.sh', '.bat', '.sql'}
+            
+            for item in tree:
+                if item['type'] == 'blob':
+                    file_path = item['path']
+                    ext = Path(file_path).suffix
+                    if ext in allowed_extensions:
+                        # Fetch file content
+                        raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{'main' if 'main' in api_url else 'master'}/{file_path}"
+                        file_response = requests.get(raw_url)
+                        if file_response.status_code == 200:
+                            files_data.append({
+                                "name": file_path,
+                                "content": file_response.text,
+                                "size": len(file_response.content)
+                            })
+                            
+            if not files_data:
+                return None, "No supported code files found in repository."
+                
+            return files_data, None
+            
+        except Exception as e:
+            return None, str(e)
+
     # How to use section
     st.markdown("""
     ### 📋 How to Use
     
     **Step 1:** Upload Files
-    - Upload your code files (.py, .js, .ts)
+    - Upload your code files (Python, JS, Java, C++, Go, etc.)
     - Multiple files supported
     
     **Step 2:** Start Analysis
@@ -134,77 +182,97 @@ with st.sidebar:
     # API Key status
 
 
-# File uploader
-st.header("📁 Upload Code Files")
-uploaded_files = st.file_uploader(
-    "Select code files to upload",
-    type=['py', 'js', 'ts'],
-    accept_multiple_files=True,
-    help="You can upload multiple files at once"
-)
+# Main Input Area
+st.header("📂 Select Input Method")
+input_method = st.radio("Choose how to provide code:", ["Upload Files", "GitHub Repository"], horizontal=True, label_visibility="collapsed")
 
-# Process uploaded files
-if uploaded_files:
-    st.success(f"✅ {len(uploaded_files)} file(s) uploaded")
-    
-    # Consolidate all file contents into full_code_context
-    full_code_context = ""
-    for file in uploaded_files:
-        try:
-            content = file.getvalue().decode('utf-8')
-            full_code_context += f"\n\n{'='*60}\n"
-            full_code_context += f"FILE: {file.name}\n"
-            full_code_context += f"{'='*60}\n\n"
-            full_code_context += content
-        except Exception as e:
-            st.error(f"Error reading {file.name}: {str(e)}")
-    
-    st.session_state['full_code_context'] = full_code_context
-    st.session_state['uploaded_files'] = uploaded_files
+if 'uploaded_files_data' not in st.session_state:
+    st.session_state['uploaded_files_data'] = []
 
-# Create tabs
-if uploaded_files:
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📋 System Structure",
-        "🔍 Module Analysis",
-        "⚠️ Risk Map",
-        "💬 Ask Your Code"
-    ])
-    
-    # Tab 1: System Structure
-    with tab1:
-        st.header("System Structure")
-        st.markdown("### 📊 Uploaded Files:")
+with st.container():
+    if input_method == "Upload Files":
+        uploaded_files = st.file_uploader(
+            "Select code files to upload",
+            accept_multiple_files=True,
+            help="You can upload multiple files at once. The system will attempt to analyze any text-based code file."
+        )
         
-        # Display files with their sizes
-        for file in uploaded_files:
-            file_size_kb = len(file.getvalue()) / 1024
-            col1, col2, col3 = st.columns([3, 1, 1])
-            
-            with col1:
-                st.write(f"📄 **{file.name}**")
-            with col2:
-                st.write(f"{file_size_kb:.2f} KB")
-            with col3:
-                file_extension = Path(file.name).suffix[1:].upper()
-                st.badge(file_extension, color="blue")
-            
-            with st.expander(f"View content: {file.name}"):
+        if uploaded_files:
+            # Process uploaded files into standard format
+            files_data = []
+            for file in uploaded_files:
                 try:
                     content = file.getvalue().decode('utf-8')
-                    st.code(content, language=file_extension.lower())
-                except Exception as e:
-                    st.error(f"Cannot display file: {str(e)}")
+                    files_data.append({
+                        "name": file.name,
+                        "content": content,
+                        "size": len(file.getvalue())
+                    })
+                except:
+                    st.warning(f"Skipped binary or unsupported file: {file.name}")
+            
+            st.session_state['uploaded_files_data'] = files_data
+            
+             # Build context string
+            st.session_state['full_code_context'] = ""
+            for file in files_data:
+                st.session_state['full_code_context'] += f"\n--- FILE: {file['name']} ---\n{file['content']}\n"
+
+    else:  # GitHub Repository
+        col_repo, col_btn = st.columns([4, 1])
+        with col_repo:
+            repo_url = st.text_input("Enter GitHub Repository URL", placeholder="https://github.com/owner/repo")
+        with col_btn:
+            fetch_clicked = st.button("Fetch Repo", type="primary", use_container_width=True)
+            
+        if fetch_clicked and repo_url:
+            with st.spinner("Fetching repository..."):
+                files_data, error = fetch_github_repo(repo_url)
+                if error:
+                    st.error(f"❌ {error}")
+                else:
+                    st.session_state['uploaded_files_data'] = files_data
+                    st.success(f"✅ Successfully fetched {len(files_data)} files!")
+                    
+                    # Build context string
+                    st.session_state['full_code_context'] = ""
+                    for file in files_data:
+                        st.session_state['full_code_context'] += f"\n--- FILE: {file['name']} ---\n{file['content']}\n"
+
+# Only show tabs if we have data
+if st.session_state['uploaded_files_data']:
+    st.divider()
+    
+    # Analysis Tabs
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "🔍 Module Analysis", "🗺️ Risk Map", "💬 Ask Your Code"])
+    
+    # Tab 1: Dashboard
+    with tab1:
+        st.header("Project Dashboard")
+        
+        total_files = len(st.session_state['uploaded_files_data'])
+        total_size_kb = sum(f['size'] for f in st.session_state['uploaded_files_data']) / 1024
+        
+        # Determine primary language (simple heuristic)
+        extensions = [Path(f['name']).suffix for f in st.session_state['uploaded_files_data']]
+        if extensions:
+            primary_lang = max(set(extensions), key=extensions.count).replace(".", "").upper()
+            if primary_lang == "": primary_lang = "Mixed"
+        else:
+            primary_lang = "Unknown"
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Files Scanned", total_files)
+        m2.metric("Total Codebase Size", f"{total_size_kb:.1f} KB")
+        m3.metric("Primary Language", primary_lang)
         
         st.divider()
+        st.markdown("### 📄 Files Found:")
         
-        # Summary statistics
-        col1, col2 = st.columns(2)
-        with col1:
-            total_size = sum(len(file.getvalue()) for file in uploaded_files) / 1024
-            st.metric("Total Size", f"{total_size:.2f} KB")
-        with col2:
-            st.metric("Number of Files", len(uploaded_files))
+        # Display files list in a scrollable container or expander
+        for file in st.session_state['uploaded_files_data']:
+             with st.expander(f"{file['name']} ({file['size']/1024:.1f} KB)"):
+                st.code(file['content'][:500] + ("..." if len(file['content']) > 500 else ""), language=Path(file['name']).suffix[1:])
     
     # Tab 2: Module Analysis
     with tab2:
