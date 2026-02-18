@@ -56,29 +56,12 @@ def get_db_session():
             host = secrets["host"]
             port = secrets["port"]
             dbname = secrets["dbname"]
+            db_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
         elif "database" in st.secrets and "url" in st.secrets["database"]:
-             # Basic parsing if URL provided (fallback)
-             st.error("Please use the [postgres] format in secrets for best compatibility.")
-             return None
+             db_url = st.secrets["database"]["url"]
         else:
             st.error("Missing database configuration in secrets.toml")
             return None
-
-        # Workaround for IPv6 issues on local Windows with Supabase
-        # Force IPv4 resolution
-        try:
-            # Force IPv4 resolution
-            addr_info = socket.getaddrinfo(host, port, family=socket.AF_INET, proto=socket.IPPROTO_TCP)
-            if addr_info:
-                host_ip = addr_info[0][4][0]
-                # Use hostaddr to force connection to IP, but keep host for SSL verification
-                db_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}?hostaddr={host_ip}&sslmode=require"
-            else:
-                 # Fallback if no IPv4 found
-                 db_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}?sslmode=require"
-        except Exception:
-            # Fallback if resolution fails completely
-            db_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}?sslmode=require"
 
         engine = create_engine(db_url)
         Base.metadata.create_all(engine)
