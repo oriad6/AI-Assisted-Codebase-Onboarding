@@ -4,6 +4,7 @@ from pathlib import Path
 import requests
 import hashlib
 import json
+import socket
 from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
@@ -42,8 +43,12 @@ class Project(Base):
 # Database Connection
 def get_db_session():
     try:
-        # Construct connection string from secrets
-        # Supports both [postgres] (individual fields) and [database] (url) formats
+        host = None
+        port = None
+        user = None
+        password = None
+        dbname = None
+
         if "postgres" in st.secrets:
             secrets = st.secrets["postgres"]
             user = secrets["user"]
@@ -51,11 +56,23 @@ def get_db_session():
             host = secrets["host"]
             port = secrets["port"]
             dbname = secrets["dbname"]
-            db_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
         elif "database" in st.secrets and "url" in st.secrets["database"]:
-            db_url = st.secrets["database"]["url"]
+             # Basic parsing if URL provided (fallback)
+             st.error("Please use the [postgres] format in secrets for best compatibility.")
+             return None
         else:
             st.error("Missing database configuration in secrets.toml")
+            return None
+
+        # Workaround for IPv6 issues on local Windows with Supabase
+        # Force IPv4 resolution
+        try:
+            # Resolve host to IPv4 address
+            host_ip = socket.gethostbyname(host)
+            # Use hostaddr to force connection to IP, but keep host for SSL verification
+            db_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}?hostaddr={host_ip}&sslmode=require"
+        except socket.gaierror:
+            st.error(f"Could not resolve host: {host}")
             return None
 
         engine = create_engine(db_url)
