@@ -42,8 +42,22 @@ class Project(Base):
 # Database Connection
 def get_db_session():
     try:
-        # Expecting st.secrets["database"]["url"]
-        db_url = st.secrets["database"]["url"]
+        # Construct connection string from secrets
+        # Supports both [postgres] (individual fields) and [database] (url) formats
+        if "postgres" in st.secrets:
+            secrets = st.secrets["postgres"]
+            user = secrets["user"]
+            password = secrets["password"]
+            host = secrets["host"]
+            port = secrets["port"]
+            dbname = secrets["dbname"]
+            db_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+        elif "database" in st.secrets and "url" in st.secrets["database"]:
+            db_url = st.secrets["database"]["url"]
+        else:
+            st.error("Missing database configuration in secrets.toml")
+            return None
+
         engine = create_engine(db_url)
         Base.metadata.create_all(engine)
         Session = sessionmaker(bind=engine)
