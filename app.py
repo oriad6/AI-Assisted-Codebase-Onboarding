@@ -366,8 +366,27 @@ else:
         else: st.info("Run module analysis first.")
         
     with t4:
-        col_c1, col_c2 = st.columns([5, 1])
-        if col_c2.button("🗑️ Clear", use_container_width=True):
+        # Subtle Styling for Delete Buttons
+        st.markdown("""
+            <style>
+            .stButton>button[key^="chat_del_"] {
+                color: #cccccc !important;
+                background-color: transparent !important;
+                border: none !important;
+                padding: 0px !important;
+                width: 20px !important;
+                height: 20px !important;
+                font-size: 12px !important;
+            }
+            .stButton>button[key^="chat_del_"]:hover {
+                color: #ff4b4b !important;
+                background-color: #ffeeee !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        col_c1, col_c2 = st.columns([4, 2])
+        if col_c2.button("🗑️ Clear Chat History", use_container_width=True):
             st.session_state['messages'] = []
             st.rerun()
             
@@ -375,12 +394,13 @@ else:
         chat_container = st.container()
         with chat_container:
             for idx, m in enumerate(st.session_state['messages']):
-                c_chat1, c_chat2 = st.columns([0.93, 0.07])
+                c_chat1, c_chat2 = st.columns([0.94, 0.06])
                 with c_chat1:
                     with st.chat_message(m['role'], avatar=USER_ICON if m['role']=='user' else BOT_ICON):
                         st.write(m['content'])
                 with c_chat2:
-                    if st.button("❌", key=f"chat_del_{idx}", help="Delete"):
+                    # The key handles the styling via CSS selector above
+                    if st.button("✕", key=f"chat_del_{idx}"):
                         st.session_state['messages'].pop(idx)
                         st.rerun()
 
