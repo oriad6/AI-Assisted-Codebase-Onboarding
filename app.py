@@ -232,7 +232,7 @@ with st.sidebar:
     st.divider()
     with st.expander("⚙️ API Settings", expanded=True):
         api_key_help = "Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey) 🔗"
-        api_key = st.text_input("Google AI API Key ❓", type="password", help=api_key_help)
+        api_key = st.text_input("Google AI API Key 🔑", type="password", help=api_key_help)
         
         if api_key:
             if st.button("🔍 Test API Connection", use_container_width=True):
@@ -258,7 +258,7 @@ with st.sidebar:
             st.session_state['show_import_screen'] = False
             st.rerun()
 
-st.title("🤖 Code Repository Onboarding")
+st.markdown("# 🤖 Code Repository Onboarding")
 
 # Not logged in
 if not st.session_state['user_info']:
@@ -357,7 +357,7 @@ else:
                     if m == "Error": st.error(res)
                     else:
                         if "<<<SEP>>>" in res:
-                            p1, p2 = res.split("<<<SEP>>>")
+                            p1, p2 = res.split("<<<SEP>>>", 1)
                             st.session_state['analysis_module'], st.session_state['analysis_risk'] = p1, p2
                         else: st.session_state['analysis_module'] = res
         
@@ -380,7 +380,7 @@ else:
             
     with t4:
         for m in st.session_state['messages']:
-            with st.chat_message(m['role'], avatar="🧑💻" if m['role']=='user' else "🤖"):
+            with st.chat_message(m['role'], avatar="�" if m['role']=='user' else "🤖"):
                 st.write(m['content'])
         
         if q := st.chat_input("Ask about the code..."):
