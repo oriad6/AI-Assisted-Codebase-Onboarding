@@ -220,7 +220,7 @@ with st.sidebar:
             st.session_state['show_import_screen'] = False
             st.rerun()
 
-st.markdown("# 🤖 Code Repository Onboarding")
+st.markdown('### <img src="https://img.icons8.com/clouds/100/bot.png" width="50"> Code Repository Onboarding', unsafe_allow_html=True)
 
 if not st.session_state['user_info']:
     st.info("Welcome! Please login to start analyzing code repositories.")
@@ -337,13 +337,13 @@ else:
         else: st.info("Run module analysis first.")
     with t4:
         for m in st.session_state['messages']:
-            with st.chat_message(m['role'], avatar="👤" if m['role']=='user' else "🤖"):
+            with st.chat_message(m['role'], avatar="👤" if m['role']=='user' else "https://img.icons8.com/clouds/100/bot.png"):
                 st.write(m['content'])
         if q := st.chat_input("Ask about the code..."):
             st.session_state['messages'].append({"role": "user", "content": q})
             st.rerun()
         if st.session_state['messages'] and st.session_state['messages'][-1]['role'] == 'user':
-            with st.chat_message("assistant", avatar="🤖"):
+            with st.chat_message("assistant", avatar="https://img.icons8.com/clouds/100/bot.png"):
                 with st.spinner("Thinking..."):
                     if not api_key: st.error("API Key missing")
                     else:
