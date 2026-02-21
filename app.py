@@ -17,6 +17,13 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- Custom Icons & Styles ---
+BOT_ICON = "🤖" # Using emoji with styling for reliability
+USER_ICON = "👤"
+
+def render_bot_icon(size=40):
+    return f'<div style="display:inline-block; background-color:#f0f7ff; border-radius:50%; padding:8px; width:{size}px; height:{size}px; text-align:center; line-height:{size-16}px; font-size:{size-16}px; border: 1px solid #d1e3f8; box-shadow: 1px 1px 3px rgba(0,0,0,0.05);">{BOT_ICON}</div>'
+
 # --- Database Setup (SQLAlchemy) ---
 Base = declarative_base()
 
@@ -54,7 +61,8 @@ def get_db_session():
         elif "database" in st.secrets and "url" in st.secrets["database"]:
             db_url = st.secrets["database"]["url"]
         else: return None
-        engine = create_engine(db_url)
+        # pool_pre_ping ensures we don't use stale connections, solving a common 2-click delay
+        engine = create_engine(db_url, pool_pre_ping=True)
         Base.metadata.create_all(engine)
         Session = sessionmaker(bind=engine)
         return Session()
@@ -72,6 +80,7 @@ if 'messages' not in st.session_state: st.session_state['messages'] = []
 if 'project_source' not in st.session_state: st.session_state['project_source'] = None
 if 'current_repo_url' not in st.session_state: st.session_state['current_repo_url'] = ""
 if 'show_import_screen' not in st.session_state: st.session_state['show_import_screen'] = False
+if 'is_loaded_from_db' not in st.session_state: st.session_state['is_loaded_from_db'] = False
 
 session = get_db_session()
 
@@ -217,10 +226,12 @@ with st.sidebar:
             st.session_state['full_code_context'] = ""
             st.session_state['analysis_module'] = ""
             st.session_state['analysis_risk'] = ""
+            st.session_state['is_loaded_from_db'] = False
             st.session_state['show_import_screen'] = False
             st.rerun()
 
-st.markdown('### <img src="https://img.icons8.com/clouds/100/bot.png" width="50"> Code Repository Onboarding', unsafe_allow_html=True)
+# Styled Main Title
+st.markdown(f'<div style="display:flex; align-items:center; margin-bottom:20px;">{render_bot_icon(50)}<h1 style="margin-left:15px; margin-top:0;">Code Repository Onboarding</h1></div>', unsafe_allow_html=True)
 
 if not st.session_state['user_info']:
     st.info("Welcome! Please login to start analyzing code repositories.")
@@ -240,9 +251,8 @@ elif not st.session_state['uploaded_files_data'] and not st.session_state['show_
             if projects:
                 for p in projects:
                     c1, c2, c3 = st.columns([4, 2, 1])
-                    # Cleanup name: if it's a github URL, extraction repo name
                     display_name = p.name
-                    if "github.com/" in p.repo_url:
+                    if "github.com/" in str(p.repo_url):
                         display_name = p.repo_url.split("/")[-1] or p.name
                     c1.write(f"**{display_name}**")
                     c2.caption(f"📅 {p.created_at.strftime('%Y-%m-%d %H:%M')}")
@@ -250,12 +260,14 @@ elif not st.session_state['uploaded_files_data'] and not st.session_state['show_
                         st.session_state['full_code_context'] = p.code_context
                         st.session_state['analysis_module'] = p.analysis_module
                         st.session_state['analysis_risk'] = p.analysis_risk
-                        st.session_state['uploaded_files_data'] = [{"name": display_name, "content": "Loaded from History"}]
+                        st.session_state['uploaded_files_data'] = [{"name": display_name, "content": "Project Data Loaded"}]
                         st.session_state['project_source'] = p.source_type
                         st.session_state['current_repo_url'] = p.repo_url
+                        st.session_state['is_loaded_from_db'] = True
                         st.rerun()
             else: st.info("No saved projects found.")
-        except: st.error("Error loading history")
+        except Exception as e: 
+            st.error(f"Error loading history: {e}")
 
 elif st.session_state['show_import_screen'] and not st.session_state['uploaded_files_data']:
     if st.button("🔙 Back to History"):
@@ -275,6 +287,7 @@ elif st.session_state['show_import_screen'] and not st.session_state['uploaded_f
                     st.session_state['project_source'] = "github"
                     st.session_state['current_repo_url'] = repo_url
                     st.session_state['show_import_screen'] = False
+                    st.session_state['is_loaded_from_db'] = False
                     st.rerun()
                 else: st.error(err)
     with col2:
@@ -294,6 +307,7 @@ elif st.session_state['show_import_screen'] and not st.session_state['uploaded_f
                     st.session_state['project_source'] = "upload"
                     st.session_state['current_repo_url'] = "Local Upload"
                     st.session_state['show_import_screen'] = False
+                    st.session_state['is_loaded_from_db'] = False
                     st.rerun()
                 else: st.error("No valid text files.")
 
@@ -302,17 +316,31 @@ else:
     with t1:
         st.metric("Total Files", len(st.session_state['uploaded_files_data']))
         for f in st.session_state['uploaded_files_data']:
+            # For history-loaded projects, we only show metadata if context is empty
             with st.expander(f.get('name', 'Unknown')):
-                if 'content' in f: st.code(f['content'][:300], language='python')
-                else: st.write("Content loaded from history.")
+                if not st.session_state['is_loaded_from_db'] and 'content' in f: 
+                    st.code(f['content'][:500], language='python')
+                else:
+                    st.write("Source code context available for AI analysis. Reprocess to view full files here.")
+                    
     with t2:
         if st.session_state['user_info']:
             c_save1, c_save2 = st.columns([3, 1])
-            save_name = c_save1.text_input("Project Name to Save", value=st.session_state['current_repo_url'].split("/")[-1] if "/" in st.session_state['current_repo_url'] else "My Project", label_visibility="collapsed", placeholder="Project Name")
+            save_name_val = st.session_state['current_repo_url'].split("/")[-1] if "/" in st.session_state['current_repo_url'] else "My Project"
+            save_name = c_save1.text_input("Project Name", value=save_name_val, label_visibility="collapsed", placeholder="Project Name")
             if c_save2.button("💾 Save Project", use_container_width=True):
                 if session:
                     try:
-                        new_p = Project(user_id=st.session_state['user_info']['id'], name=save_name, source_type=st.session_state['project_source'], repo_url=st.session_state['current_repo_url'], code_context=st.session_state['full_code_context'], analysis_module=st.session_state['analysis_module'], analysis_risk=st.session_state['analysis_risk'])
+                        # CRITICAL: Ensure we save the LATEST analysis state
+                        new_p = Project(
+                            user_id=st.session_state['user_info']['id'], 
+                            name=save_name, 
+                            source_type=st.session_state['project_source'], 
+                            repo_url=st.session_state['current_repo_url'], 
+                            code_context=st.session_state['full_code_context'], 
+                            analysis_module=st.session_state['analysis_module'], 
+                            analysis_risk=st.session_state['analysis_risk']
+                        )
                         session.add(new_p)
                         session.commit()
                         st.success("Project saved successfully!")
@@ -332,18 +360,36 @@ else:
                             st.session_state['analysis_module'], st.session_state['analysis_risk'] = p1.strip(), p2.strip()
                         else: st.session_state['analysis_module'] = res
         if st.session_state['analysis_module']: st.markdown(st.session_state['analysis_module'])
+        
     with t3:
         if st.session_state['analysis_risk']: st.markdown(st.session_state['analysis_risk'])
         else: st.info("Run module analysis first.")
+        
     with t4:
-        for m in st.session_state['messages']:
-            with st.chat_message(m['role'], avatar="👤" if m['role']=='user' else "https://img.icons8.com/clouds/100/bot.png"):
-                st.write(m['content'])
+        col_c1, col_c2 = st.columns([5, 1])
+        if col_c2.button("🗑️ Clear", use_container_width=True):
+            st.session_state['messages'] = []
+            st.rerun()
+            
+        # Fixed height message container
+        chat_container = st.container()
+        with chat_container:
+            for idx, m in enumerate(st.session_state['messages']):
+                c_chat1, c_chat2 = st.columns([0.93, 0.07])
+                with c_chat1:
+                    with st.chat_message(m['role'], avatar=USER_ICON if m['role']=='user' else BOT_ICON):
+                        st.write(m['content'])
+                with c_chat2:
+                    if st.button("❌", key=f"chat_del_{idx}", help="Delete"):
+                        st.session_state['messages'].pop(idx)
+                        st.rerun()
+
         if q := st.chat_input("Ask about the code..."):
             st.session_state['messages'].append({"role": "user", "content": q})
             st.rerun()
+            
         if st.session_state['messages'] and st.session_state['messages'][-1]['role'] == 'user':
-            with st.chat_message("assistant", avatar="https://img.icons8.com/clouds/100/bot.png"):
+            with st.chat_message("assistant", avatar=BOT_ICON):
                 with st.spinner("Thinking..."):
                     if not api_key: st.error("API Key missing")
                     else:
@@ -353,6 +399,9 @@ else:
                         else:
                             st.write(ans)
                             st.session_state['messages'].append({"role": "assistant", "content": ans})
+                            st.rerun()
+
+if session: session.close()
 
 
 # Close session at end of script run if using scoped session management in a real app, 
