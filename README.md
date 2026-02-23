@@ -61,6 +61,7 @@ If you wish to run this project locally on your machine, follow these steps:
 
 ### 1. Clone the Project
 git clone [https://github.com/oriad6/AI-Assisted-Codebase-Onboarding.git](https://github.com/oriad6/AI-Assisted-Codebase-Onboarding.git)
+
 cd AI-Assisted-Codebase-Onboarding
 
 ### 2. Install Dependencies
