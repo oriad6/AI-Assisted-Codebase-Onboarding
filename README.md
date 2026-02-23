@@ -61,25 +61,25 @@ If you wish to run this project locally on your machine, follow these steps:
 
 ### 1. Clone the Project
 ```bash
-git clone [https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git](https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git)
-cd YOUR_REPO_NAME
+git clone https://github.com/oriad6/AI-Assisted-Codebase-Onboarding.git
+cd AI-Assisted-Codebase-Onboarding
 
-## 2. Install Dependencies
+### 2. Install Dependencies
 pip install -r requirements.txt
 
-## 3. Setup Configuration (Secrets)
+### 3. Setup Configuration (Secrets)
 Create a folder named .streamlit and inside it a file named secrets.toml:
 GOOGLE_API_KEY = "your_google_api_key"
 
 [database]
 url = "postgresql://postgres.user:password@host:port/postgres"
 
-## 4. Database Setup
+### 4. Database Setup
 Initialize your Supabase project with the following tables:
 
 users (id, username, password_hash)
 
 projects (id, user_id, repo_name, analysis_json, created_at)
 
-## 5. Run Locally
+### 5. Run Locally
 streamlit run app.py
