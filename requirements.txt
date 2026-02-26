@@ -3,3 +3,4 @@ google-generativeai
 requests
 psycopg2-binary
 sqlalchemy
+markdown
