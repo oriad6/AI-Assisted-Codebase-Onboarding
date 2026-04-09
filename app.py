@@ -28,6 +28,11 @@ st.set_page_config(
 BOT_ICON = "🤖"  # Using emoji with styling for reliability
 USER_ICON = "👤"
 
+def is_hebrew(text: str) -> bool:
+    import re
+    return bool(re.search(r'[\u0590-\u05FF]', text or ""))
+
+
 def render_bot_icon(size=40):
     # Use the native emoji directly to avoid grayscale/fallback rendering issues
     return f'<span style="font-size:{size}px; line-height:{size}px; display:inline-block;">{BOT_ICON}</span>'
@@ -105,7 +110,8 @@ def _inject_theme_css(*, variant: str, light_mode: bool) -> None:
 
     css = f"""
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Space+Grotesk:wght@400;600&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Space+Grotesk:wght@400;600&family=Assistant:wght@400;600;700&display=swap');
+
 
       :root {{
         --bg0: {bg0};
@@ -132,8 +138,9 @@ def _inject_theme_css(*, variant: str, light_mode: bool) -> None:
           radial-gradient(900px 520px at 86% 18%, var(--glow2), transparent 62%),
           linear-gradient(180deg, var(--bg0), var(--bg1));
         color: var(--text);
-        font-family: "Space Grotesk", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        font-family: "Space Grotesk", "Assistant", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       }}
+
       /* Remove default white header bar but keep icons */
       [data-testid="stHeader"] {{
         background: transparent !important;
@@ -369,6 +376,17 @@ def _inject_theme_css(*, variant: str, light_mode: bool) -> None:
       .bubble.assistant {{
         background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
       }}
+      .bubble.rtl {{
+        direction: rtl;
+        text-align: right;
+        font-family: "Assistant", system-ui, sans-serif;
+      }}
+      .bubble.rtl pre, .bubble.rtl code {{
+        direction: ltr;
+        text-align: left;
+        display: block;
+      }}
+
       .bubble pre, .bubble code {{
         background: rgba(0,0,0,0.18);
         border-radius: 12px;
@@ -951,17 +969,20 @@ else:
                 with c_chat1:
                     role = m.get("role", "assistant")
                     content_html = _safe_markdown_to_html(m.get("content", ""))
+                    is_rtl = is_hebrew(m.get("content", ""))
+                    rtl_class = "rtl" if is_rtl else ""
                     st.markdown(
                         f"""
-                        <div class="chat-row {role}">
+                        <div class="chat-row {role} {rtl_class}">
                           <div class="chat-icon {role}">{_html.escape(USER_ICON if role == 'user' else BOT_ICON)}</div>
-                          <div class="bubble {role}">
+                          <div class="bubble {role} {rtl_class}">
                             {content_html}
                           </div>
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
+
                 with c_chat2:
                     # The key handles the styling via CSS selector above
                     if st.button("✕", key=f"chat_del_{idx}"):
@@ -987,7 +1008,10 @@ else:
                     if not api_key:
                         st.error("API Key missing")
                     else:
-                        ctx = st.session_state['full_code_context'][:20000] + "\nQ: " + st.session_state['messages'][-1]['content']
+                        # Add RTL/Hebrew instruction if hebrew is detected in history
+                        system_hint = "\nIf the user speaks Hebrew, please respond in Hebrew and maintain a helpful, professional tone."
+                        ctx = st.session_state['full_code_context'][:20000] + system_hint + "\nQ: " + st.session_state['messages'][-1]['content']
+
                         ans, m = generate_content_with_fallback(ctx, api_key)
                         if m == "Error":
                             st.error(ans)
